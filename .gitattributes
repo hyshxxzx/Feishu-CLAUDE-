@@ -1,2 +1,17 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# 默认按文本处理，仓库内统一用 LF
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF，否则 cmd.exe 解析行错乱（打包脚本会失败）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 以下显式用 LF
+*.sh  text eol=lf
+*.py  text eol=lf
+*.md  text eol=lf
+
+# 二进制文件不做换行符转换
+*.png binary
+*.ico binary
+*.exe binary
+*.db  binary
