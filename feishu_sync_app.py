@@ -405,7 +405,10 @@ def _is_process_narration(text, role):
         return True
     return bool(_PROC_CUE_RE.search(t))
 
-def _extract_text(content, skip_tool_use=True, skip_tool_result=True):
+def _extract_text(content, skip_tool_use=True, skip_tool_result=True, tr_limit=300):
+    """提取文本。tr_limit 控制工具结果截断长度，None 表示完整保留（用于 Markdown 导出）。"""
+    def _cut(s):
+        return s if tr_limit is None else s[:tr_limit]
     if isinstance(content, str):  return content.strip()
     if isinstance(content, list):
         parts = []
@@ -421,9 +424,9 @@ def _extract_text(content, skip_tool_use=True, skip_tool_result=True):
                 if isinstance(inner, list):
                     for x in inner:
                         if isinstance(x,dict) and x.get("type")=="text":
-                            parts.append(f"[工具结果: {x.get('text','')[:300]}]")
+                            parts.append(f"[工具结果: {_cut(x.get('text',''))}]")
                 elif isinstance(inner, str):
-                    parts.append(f"[工具结果: {inner[:300]}]")
+                    parts.append(f"[工具结果: {_cut(inner)}]")
         return "\n".join(p for p in parts if p)
     return ""
 
@@ -536,7 +539,8 @@ def _fmt_ts(ts_str, fmt="%Y-%m-%d %H:%M:%S"):
         return ts_str
 
 def _parse_for_export(path):
-    """为 Markdown 导出解析单个会话：保留 user/assistant 正文，去掉工具链、子代理与结构化噪音。"""
+    """为 Markdown 导出解析单个会话：原样保留全部内容，不做任何过滤
+    （含工具调用、工具结果、子代理、命令等），仅跳过完全空白的消息。"""
     msgs = []
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -546,13 +550,12 @@ def _parse_for_export(path):
                 try: obj = json.loads(line)
                 except Exception: continue
                 if obj.get("type") not in ("user", "assistant"): continue
-                if obj.get("isSidechain"): continue
                 m    = obj.get("message", {})
                 role = m.get("role", obj.get("type", ""))
-                text = _extract_text(m.get("content", ""), skip_tool_use=True, skip_tool_result=True)
-                text = _clean_noise(text)
+                # 不过滤：保留工具调用/结果，工具结果不截断
+                text = _extract_text(m.get("content", ""),
+                                     skip_tool_use=False, skip_tool_result=False, tr_limit=None)
                 if not text: continue
-                if _is_command_message(text): continue
                 msgs.append((role, text, obj.get("timestamp", "")))
     except Exception as e:
         add_log("ERROR", f"导出解析失败 {os.path.basename(path)}: {e}")
